@@ -1148,6 +1148,7 @@ public class HttpIntegrationTests extends SingleClusterTest {
             new BasicHeader("opendistro_security_impersonate_as", "someotherusernotininternalusersfile"),
             encodeBasicHeader("worf", "worf")
         );
+        System.out.println("Here is the response!!!: " + res);
         Assert.assertEquals(HttpStatus.SC_OK, res.getStatusCode());
         Assert.assertTrue(res.getBody().contains("name=someotherusernotininternalusersfile"));
         Assert.assertFalse(res.getBody().contains("worf"));
