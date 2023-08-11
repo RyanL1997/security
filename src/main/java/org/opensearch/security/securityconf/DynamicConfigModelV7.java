@@ -65,6 +65,7 @@ import org.opensearch.security.securityconf.impl.v7.ConfigV7.AuthcDomain;
 import org.opensearch.security.securityconf.impl.v7.ConfigV7.Authz;
 import org.opensearch.security.securityconf.impl.v7.ConfigV7.AuthzDomain;
 import org.opensearch.security.support.ReflectionHelper;
+import org.opensearch.threadpool.ThreadPool;
 
 public class DynamicConfigModelV7 extends DynamicConfigModel {
 
@@ -82,13 +83,15 @@ public class DynamicConfigModelV7 extends DynamicConfigModel {
     private Multimap<String, AuthFailureListener> authBackendFailureListeners;
     private List<ClientBlockRegistry<InetAddress>> ipClientBlockRegistries;
     private Multimap<String, ClientBlockRegistry<String>> authBackendClientBlockRegistries;
+    private ThreadPool threadPool;
 
-    public DynamicConfigModelV7(ConfigV7 config, Settings opensearchSettings, Path configPath, InternalAuthenticationBackend iab) {
+    public DynamicConfigModelV7(ConfigV7 config, Settings opensearchSettings, Path configPath, InternalAuthenticationBackend iab, ThreadPool threadPool) {
         super();
         this.config = config;
         this.opensearchSettings = opensearchSettings;
         this.configPath = configPath;
         this.iab = iab;
+        this.threadPool = threadPool;
         buildAAA();
     }
 
@@ -371,7 +374,7 @@ public class DynamicConfigModelV7 extends DynamicConfigModel {
         if (oboSettings.get("signing_key") != null && oboSettings.get("encryption_key") != null) {
             final AuthDomain _ad = new AuthDomain(
                 new NoOpAuthenticationBackend(Settings.EMPTY, null),
-                new OnBehalfOfAuthenticator(getDynamicOnBehalfOfSettings()),
+                new OnBehalfOfAuthenticator(getDynamicOnBehalfOfSettings(), threadPool),
                 false,
                 -1
             );

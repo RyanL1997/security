@@ -13,10 +13,13 @@ package org.opensearch.security.http;
 
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -29,19 +32,25 @@ import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import org.greenrobot.eventbus.Subscribe;
 import org.opensearch.OpenSearchException;
 import org.opensearch.OpenSearchSecurityException;
 import org.opensearch.SpecialPermission;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.concurrent.ThreadContext;
+import org.opensearch.core.common.transport.TransportAddress;
 import org.opensearch.rest.RestChannel;
 import org.opensearch.rest.RestRequest;
 import org.opensearch.security.OpenSearchSecurityPlugin;
 import org.opensearch.security.auth.HTTPAuthenticator;
 import org.opensearch.security.authtoken.jwt.EncryptionDecryptionUtil;
+import org.opensearch.security.securityconf.ConfigModel;
 import org.opensearch.security.ssl.util.ExceptionUtils;
+import org.opensearch.security.support.ConfigConstants;
 import org.opensearch.security.user.AuthCredentials;
+import org.opensearch.security.user.User;
 import org.opensearch.security.util.keyUtil;
+import org.opensearch.threadpool.ThreadPool;
 
 import static org.opensearch.security.OpenSearchSecurityPlugin.LEGACY_OPENDISTRO_PREFIX;
 import static org.opensearch.security.OpenSearchSecurityPlugin.PLUGINS_PREFIX;
@@ -63,12 +72,17 @@ public class OnBehalfOfAuthenticator implements HTTPAuthenticator {
     private final JwtParser jwtParser;
     private final String encryptionKey;
     private final Boolean oboEnabled;
+    private final ThreadPool threadPool;
+    private ConfigModel configModel;
 
-    public OnBehalfOfAuthenticator(Settings settings) {
+
+
+    public OnBehalfOfAuthenticator(Settings settings, ThreadPool threadPool) {
         String oboEnabledSetting = settings.get("enabled");
         oboEnabled = oboEnabledSetting == null ? Boolean.TRUE : Boolean.valueOf(oboEnabledSetting);
         encryptionKey = settings.get("encryption_key");
         jwtParser = initParser(settings.get("signing_key"));
+        this.threadPool= threadPool;
     }
 
     private JwtParser initParser(final String signingKey) {
@@ -217,10 +231,21 @@ public class OnBehalfOfAuthenticator implements HTTPAuthenticator {
                 return null;
             }
 
-            List<String> roles = extractSecurityRolesFromClaims(claims);
+            final User user = threadPool.getThreadContext().getTransient(ConfigConstants.OPENDISTRO_SECURITY_USER);
+            final TransportAddress caller = threadPool.getThreadContext().getTransient(ConfigConstants.OPENDISTRO_SECURITY_REMOTE_ADDRESS);
+
+            // Map roles based on caller's address
+            Set<String> callerMappedRoles = mapRoles(user, caller);
+
+            // Merge JWT roles and caller mapped roles
+            List<String> rolesFromClaims = extractSecurityRolesFromClaims(claims);
+            Set<String> allRolesSet = new HashSet<>(rolesFromClaims);
+            allRolesSet.addAll(callerMappedRoles);
+
+            List<String> allRolesList = new ArrayList<>(allRolesSet);
             String[] backendRoles = extractBackendRolesFromClaims(claims);
 
-            final AuthCredentials ac = new AuthCredentials(subject, roles, backendRoles).markComplete();
+            final AuthCredentials ac = new AuthCredentials(subject, allRolesList, backendRoles).markComplete();
 
             for (Entry<String, Object> claim : claims.entrySet()) {
                 ac.addAttribute("attr.jwt." + claim.getKey(), String.valueOf(claim.getValue()));
@@ -240,6 +265,9 @@ public class OnBehalfOfAuthenticator implements HTTPAuthenticator {
         }
     }
 
+    public Set<String> mapRoles(final User user, final TransportAddress caller) {
+        return this.configModel.mapSecurityRoles(user, caller);
+    }
     @Override
     public boolean reRequestAuthentication(final RestChannel channel, AuthCredentials creds) {
         return false;
@@ -248,6 +276,11 @@ public class OnBehalfOfAuthenticator implements HTTPAuthenticator {
     @Override
     public String getType() {
         return "onbehalfof_jwt";
+    }
+
+    @Subscribe
+    public void onConfigModelChanged(ConfigModel configModel) {
+        this.configModel = configModel;
     }
 
 }

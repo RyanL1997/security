@@ -128,9 +128,7 @@ public class CreateOnBehalfOfTokenAction extends BaseRestHandler {
 
                     final String service = (String) requestBody.getOrDefault("service", "self-issued");
                     final User user = threadPool.getThreadContext().getTransient(ConfigConstants.OPENDISTRO_SECURITY_USER);
-                    final TransportAddress caller = threadPool.getThreadContext()
-                        .getTransient(ConfigConstants.OPENDISTRO_SECURITY_REMOTE_ADDRESS);
-                    Set<String> mappedRoles = mapRoles(user, caller);
+                    Set<String> userSecurityRoles = user.getSecurityRoles();
 
                     builder.startObject();
                     builder.field("user", user.getName());
@@ -140,7 +138,7 @@ public class CreateOnBehalfOfTokenAction extends BaseRestHandler {
                         user.getName(),
                         service,
                         tokenDuration,
-                        mappedRoles.stream().collect(Collectors.toList()),
+                        userSecurityRoles.stream().collect(Collectors.toList()),
                         user.getRoles().stream().collect(Collectors.toList())
                     );
                     builder.field("onBehalfOfToken", token);
@@ -158,9 +156,4 @@ public class CreateOnBehalfOfTokenAction extends BaseRestHandler {
             }
         };
     }
-
-    public Set<String> mapRoles(final User user, final TransportAddress caller) {
-        return this.configModel.mapSecurityRoles(user, caller);
-    }
-
 }
