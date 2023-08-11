@@ -128,17 +128,17 @@ public class CreateOnBehalfOfTokenAction extends BaseRestHandler {
 
                     final String service = (String) requestBody.getOrDefault("service", "self-issued");
                     final User user = threadPool.getThreadContext().getTransient(ConfigConstants.OPENDISTRO_SECURITY_USER);
-                    Set<String> userSecurityRoles = user.getSecurityRoles();
 
                     builder.startObject();
                     builder.field("user", user.getName());
+                    Set<String> mappedRoles = mapRoles(user, null);
 
                     final String token = vendor.createJwt(
                         clusterIdentifier,
                         user.getName(),
                         service,
                         tokenDuration,
-                        userSecurityRoles.stream().collect(Collectors.toList()),
+                        mappedRoles.stream().collect(Collectors.toList()),
                         user.getRoles().stream().collect(Collectors.toList())
                     );
                     builder.field("onBehalfOfToken", token);
@@ -155,5 +155,9 @@ public class CreateOnBehalfOfTokenAction extends BaseRestHandler {
                 channel.sendResponse(response);
             }
         };
+    }
+
+    public Set<String> mapRoles(final User user, final TransportAddress caller) {
+        return this.configModel.mapSecurityRoles(user, caller);
     }
 }

@@ -85,7 +85,13 @@ public class DynamicConfigModelV7 extends DynamicConfigModel {
     private Multimap<String, ClientBlockRegistry<String>> authBackendClientBlockRegistries;
     private ThreadPool threadPool;
 
-    public DynamicConfigModelV7(ConfigV7 config, Settings opensearchSettings, Path configPath, InternalAuthenticationBackend iab, ThreadPool threadPool) {
+    public DynamicConfigModelV7(
+        ConfigV7 config,
+        Settings opensearchSettings,
+        Path configPath,
+        InternalAuthenticationBackend iab,
+        ThreadPool threadPool
+    ) {
         super();
         this.config = config;
         this.opensearchSettings = opensearchSettings;

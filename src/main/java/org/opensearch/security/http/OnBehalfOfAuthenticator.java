@@ -13,9 +13,7 @@ package org.opensearch.security.http;
 
 import java.security.AccessController;
 import java.security.PrivilegedAction;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Objects;
@@ -74,15 +72,15 @@ public class OnBehalfOfAuthenticator implements HTTPAuthenticator {
     private final Boolean oboEnabled;
     private final ThreadPool threadPool;
     private ConfigModel configModel;
-
-
+    private final XFFResolver xffResolver;
 
     public OnBehalfOfAuthenticator(Settings settings, ThreadPool threadPool) {
         String oboEnabledSetting = settings.get("enabled");
         oboEnabled = oboEnabledSetting == null ? Boolean.TRUE : Boolean.valueOf(oboEnabledSetting);
         encryptionKey = settings.get("encryption_key");
         jwtParser = initParser(settings.get("signing_key"));
-        this.threadPool= threadPool;
+        this.threadPool = threadPool;
+        xffResolver = new XFFResolver(threadPool);
     }
 
     private JwtParser initParser(final String signingKey) {
@@ -231,21 +229,23 @@ public class OnBehalfOfAuthenticator implements HTTPAuthenticator {
                 return null;
             }
 
-            final User user = threadPool.getThreadContext().getTransient(ConfigConstants.OPENDISTRO_SECURITY_USER);
-            final TransportAddress caller = threadPool.getThreadContext().getTransient(ConfigConstants.OPENDISTRO_SECURITY_REMOTE_ADDRESS);
+            final ThreadContext threadContext = threadPool.getThreadContext();
+            final TransportAddress remoteAddress = threadContext.getTransient(ConfigConstants.OPENDISTRO_SECURITY_REMOTE_ADDRESS);
 
-            // Map roles based on caller's address
-            Set<String> callerMappedRoles = mapRoles(user, caller);
+            final boolean isTraceEnabled = log.isTraceEnabled();
+            if (isTraceEnabled) {
+                log.trace("Rest authentication request from {} [original: {}]", remoteAddress, request.getHttpChannel().getRemoteAddress());
+            }
 
-            // Merge JWT roles and caller mapped roles
+            // GET ROLES MAPPED TO HOST ADDRESS.
+            User temp = new User("temp");
+            Set<String> hostMappedRoles = mapRoles(temp, null);
+
             List<String> rolesFromClaims = extractSecurityRolesFromClaims(claims);
-            Set<String> allRolesSet = new HashSet<>(rolesFromClaims);
-            allRolesSet.addAll(callerMappedRoles);
-
-            List<String> allRolesList = new ArrayList<>(allRolesSet);
+            rolesFromClaims.addAll(hostMappedRoles);
             String[] backendRoles = extractBackendRolesFromClaims(claims);
 
-            final AuthCredentials ac = new AuthCredentials(subject, allRolesList, backendRoles).markComplete();
+            final AuthCredentials ac = new AuthCredentials(subject, rolesFromClaims, backendRoles).markComplete();
 
             for (Entry<String, Object> claim : claims.entrySet()) {
                 ac.addAttribute("attr.jwt." + claim.getKey(), String.valueOf(claim.getValue()));
@@ -265,9 +265,14 @@ public class OnBehalfOfAuthenticator implements HTTPAuthenticator {
         }
     }
 
+    @Subscribe
+    public void onConfigModelChanged(ConfigModel configModel) {
+        this.configModel = configModel;
+    }
     public Set<String> mapRoles(final User user, final TransportAddress caller) {
         return this.configModel.mapSecurityRoles(user, caller);
     }
+
     @Override
     public boolean reRequestAuthentication(final RestChannel channel, AuthCredentials creds) {
         return false;
@@ -277,10 +282,4 @@ public class OnBehalfOfAuthenticator implements HTTPAuthenticator {
     public String getType() {
         return "onbehalfof_jwt";
     }
-
-    @Subscribe
-    public void onConfigModelChanged(ConfigModel configModel) {
-        this.configModel = configModel;
-    }
-
 }
