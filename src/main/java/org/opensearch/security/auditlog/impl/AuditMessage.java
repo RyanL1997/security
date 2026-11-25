@@ -136,6 +136,13 @@ public final class AuditMessage {
     // public static final String COMPLIANCE_STORED_FIELDS_CONTENT = "audit_compliance_stored_fields_content";
 
     public static final String REQUEST_LAYER = "audit_request_layer";
+    public static final String WLM_ACTION = "audit_wlm_action";
+    public static final String WLM_WORKLOAD_GROUP_ID = "audit_wlm_workload_group_id";
+    public static final String WLM_RESILIENCY_MODE = "audit_wlm_resiliency_mode";
+    public static final String WLM_RESOURCE_TYPE = "audit_wlm_resource_type";
+    public static final String WLM_RESOURCE_THRESHOLD = "audit_wlm_resource_threshold";
+    public static final String WLM_RESOURCE_USAGE = "audit_wlm_resource_usage";
+    public static final String WLM_TASK_ID = "audit_wlm_task_id";
 
     public static final String COMPLIANCE_OPERATION = "audit_compliance_operation";
     public static final String COMPLIANCE_DOC_VERSION = "audit_compliance_doc_version";
@@ -222,6 +229,39 @@ public final class AuditMessage {
     public void addRequestId(String requestId) {
         if (requestId != null && !requestId.isEmpty()) {
             auditInfo.put(REQUEST_ID, requestId);
+        }
+    }
+
+    /**
+     * Adds the workload management action detail. Fields that do not apply to the action are omitted:
+     * a rejection has no task, because no task exists at admission, and a cancellation has no resource
+     * attribution, because the resource that selected the group is not available per task.
+     */
+    public void addWorkloadManagementDetails(
+        String action,
+        String workloadGroupId,
+        String resiliencyMode,
+        String resourceType,
+        Double threshold,
+        Double observedUsage,
+        Long taskId
+    ) {
+        auditInfo.put(WLM_ACTION, action);
+        auditInfo.put(WLM_WORKLOAD_GROUP_ID, workloadGroupId);
+        if (resiliencyMode != null) {
+            auditInfo.put(WLM_RESILIENCY_MODE, resiliencyMode);
+        }
+        if (resourceType != null) {
+            auditInfo.put(WLM_RESOURCE_TYPE, resourceType);
+        }
+        if (threshold != null) {
+            auditInfo.put(WLM_RESOURCE_THRESHOLD, threshold);
+        }
+        if (observedUsage != null) {
+            auditInfo.put(WLM_RESOURCE_USAGE, observedUsage);
+        }
+        if (taskId != null) {
+            auditInfo.put(WLM_TASK_ID, taskId);
         }
     }
 

@@ -129,6 +129,7 @@ import org.opensearch.plugins.ExtensionAwarePlugin;
 import org.opensearch.plugins.IdentityPlugin;
 import org.opensearch.plugins.MapperPlugin;
 import org.opensearch.plugins.Plugin;
+import org.opensearch.plugins.PluginComponentRegistry;
 import org.opensearch.plugins.SecureHttpTransportSettingsProvider;
 import org.opensearch.plugins.SecureSettingsFactory;
 import org.opensearch.plugins.SecureTransportSettingsProvider;
@@ -163,6 +164,7 @@ import org.opensearch.security.auditlog.config.AuditConfig.Filter.FilterEntries;
 import org.opensearch.security.auditlog.impl.AbstractAuditLog;
 import org.opensearch.security.auditlog.impl.AuditCategory;
 import org.opensearch.security.auditlog.impl.AuditLogImpl;
+import org.opensearch.security.auditlog.impl.WorkloadManagementAuditListener;
 import org.opensearch.security.auth.BackendRegistry;
 import org.opensearch.security.auth.RolesInjector;
 import org.opensearch.security.authtoken.jwt.LegacyRolesClaimFormat;
@@ -276,6 +278,7 @@ import org.opensearch.transport.client.Client;
 import org.opensearch.transport.client.node.NodeClient;
 import org.opensearch.transport.netty4.ssl.SecureNetty4Transport;
 import org.opensearch.watcher.ResourceWatcherService;
+import org.opensearch.wlm.WorkloadGroupActionNotifier;
 
 import io.netty.handler.ssl.SslHandler;
 
@@ -329,6 +332,7 @@ public final class OpenSearchSecurityPlugin extends OpenSearchSecuritySSLPlugin
     private volatile ClusterService cs;
     private volatile AtomicReference<DiscoveryNode> localNode = new AtomicReference<>();
     private volatile AuditLog auditLog;
+    private WorkloadManagementAuditListener workloadManagementAuditListener;
     private volatile BackendRegistry backendRegistry;
     private volatile SslExceptionHandler sslExceptionHandler;
     private volatile Client localClient;
@@ -366,6 +370,9 @@ public final class OpenSearchSecurityPlugin extends OpenSearchSecuritySSLPlugin
 
     @Override
     public void close() throws IOException {
+        if (workloadManagementAuditListener != null) {
+            workloadManagementAuditListener.close();
+        }
         super.close();
         if (auditLog != null) {
             auditLog.close();
@@ -1510,6 +1517,48 @@ public final class OpenSearchSecurityPlugin extends OpenSearchSecuritySSLPlugin
             }
         }
         return Collections.emptyMap();
+    }
+
+    @Override
+    public Collection<Object> createComponents(
+        Client localClient,
+        ClusterService clusterService,
+        ThreadPool threadPool,
+        ResourceWatcherService resourceWatcherService,
+        ScriptService scriptService,
+        NamedXContentRegistry xContentRegistry,
+        Environment environment,
+        NodeEnvironment nodeEnvironment,
+        NamedWriteableRegistry namedWriteableRegistry,
+        IndexNameExpressionResolver indexNameExpressionResolver,
+        Supplier<RepositoriesService> repositoriesServiceSupplier,
+        PluginComponentRegistry pluginComponentRegistry
+    ) {
+        Collection<Object> components = createComponents(
+            localClient,
+            clusterService,
+            threadPool,
+            resourceWatcherService,
+            scriptService,
+            xContentRegistry,
+            environment,
+            nodeEnvironment,
+            namedWriteableRegistry,
+            indexNameExpressionResolver,
+            repositoriesServiceSupplier
+        );
+        if (auditLog instanceof AuditLogImpl auditLogImpl) {
+            pluginComponentRegistry.getComponent(WorkloadGroupActionNotifier.class)
+                .ifPresent(
+                    notifier -> workloadManagementAuditListener = new WorkloadManagementAuditListener(
+                        notifier,
+                        auditLogImpl,
+                        clusterService,
+                        threadPool
+                    )
+                );
+        }
+        return components;
     }
 
     @Override

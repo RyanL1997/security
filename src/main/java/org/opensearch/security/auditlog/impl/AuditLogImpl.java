@@ -150,6 +150,39 @@ public class AuditLogImpl extends AbstractAuditLog {
         }
     }
 
+    /**
+     * Whether a workload management action should be recorded. Mirrors the per-layer category checks the
+     * REST and transport paths apply, but is evaluated by the listener rather than by a request filter,
+     * because the action can be raised off any request thread.
+     */
+    public boolean isWorkloadManagementAuditEnabled(String user, Origin origin) {
+        AuditConfig.Filter filter = getFilter();
+        if (!enabled
+            || filter == null
+            || filter.getDisabledCategories().contains(AuditCategory.WORKLOAD_MANAGEMENT_ACTION)
+            || !filter.isAuditEnabled(user)) {
+            return false;
+        }
+        boolean restEnabled = filter.isRestApiAuditEnabled()
+            && !filter.getDisabledRestCategories().contains(AuditCategory.WORKLOAD_MANAGEMENT_ACTION);
+        boolean transportEnabled = filter.isTransportApiAuditEnabled()
+            && !filter.getDisabledTransportCategories().contains(AuditCategory.WORKLOAD_MANAGEMENT_ACTION);
+        if (origin == Origin.REST) {
+            return restEnabled;
+        }
+        if (origin == Origin.TRANSPORT || origin == Origin.GRPC) {
+            return transportEnabled;
+        }
+        // A cancellation is raised from the workload management scheduler, which carries no origin.
+        return restEnabled || transportEnabled;
+    }
+
+    public void logWorkloadManagementAction(AuditMessage message) {
+        if (enabled) {
+            save(message);
+        }
+    }
+
     @Override
     public void logFailedLogin(String effectiveUser, boolean securityAdmin, String initiatingUser, SecurityRequest request) {
         if (enabled) {
