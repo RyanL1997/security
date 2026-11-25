@@ -213,6 +213,7 @@ public class ConfigConstants {
         AuditCategory.GRANTED_PRIVILEGES.toString(),
         AuditCategory.CLUSTER_SETTINGS_CHANGED.toString(),
         AuditCategory.INDEX_SETTINGS_CHANGED.toString(),
+        AuditCategory.WORKLOAD_MANAGEMENT_ACTION.toString(),
         AuditCategory.RESOURCE_ACCESS_GRANTED.toString(),
         AuditCategory.RESOURCE_ACCESS_DENIED.toString(),
         AuditCategory.RESOURCE_SHARING_CHANGED.toString()
